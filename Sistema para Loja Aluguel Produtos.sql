@@ -697,3 +697,371 @@ BEGIN
 END;
 /
 
+
+--*************************  PROCEDURES  ***************************
+-- PROCEDURE 1 --
+-- Usando PROCEDURE  para retonar as PRODUTOS com mais quantidade.
+SET SERVEROUTPUT ON;
+CREATE OR REPLACE  PROCEDURE QUANTIDADE_PRODUTOS IS
+    CURSOR MAIS_PRODUTOS IS 
+        SELECT nomeProduto,idProduto
+               FROM PRODUTO WHERE idProduto = (SELECT MAX(idProduto) FROM PRODUTO);
+    emp_rec  MAIS_PRODUTOS%rowtype;
+BEGIN
+    OPEN MAIS_PRODUTOS;
+    LOOP
+         FETCH MAIS_PRODUTOS INTO emp_rec;
+         EXIT WHEN MAIS_PRODUTOS%notfound;
+             dbms_output.put_line(emp_rec.nomeProduto ||'PRODUTO: '||emp_rec.idProduto ||' ID-PRODUTO: ');
+     END LOOP;
+CLOSE MAIS_PRODUTOS;
+END;
+/
+
+-- PROCEDURE 2 --   
+CREATE OR REPLACE PROCEDURE RESERVAR(COD_CLIENTE VARCHAR2, COD_P INT, COD_F INT) IS
+    SUSPENDED EXCEPTION;
+    BEGIN
+        IF VERIFICA_CLIENTE(COD_CLIENTE) = 'SIM' THEN
+            RAISE SUSPENDED;
+        END IF;
+        
+    INSERT INTO RESERVA
+           VALUES (RESERVA_SEQ.NEXTVAL, SYSTIMESTAMP, COD_CLIENTE, COD_P, COD_F);
+    COMMIT;
+        EXCEPTION
+            WHEN SUSPENDED THEN
+            ROLLBACK;
+             DBMS_OUTPUT.PUT_LINE('O cliente está suspenso, ele só podera reservar outro produto quando 
+                fazer a devolução dos que tem.');
+END RESERVAR;
+
+-- PROCEDURE 3 -- 
+-- PROCEDURE CRIADA PARA REALIZAR EMPRESTIMO DE PRODUTO
+CREATE OR REPLACE PROCEDURE EMP_PROD( 
+    FUN_ID EMPRESTIMO.idFuncionario%TYPE,
+    CPF_CLI EMPRESTIMO.cpfCliente%TYPE,
+    QTD_PROD EMPRESTIMO.EMPRESTIMO_QTD_PRODUTO%TYPE,
+    PROD_ID EMPRESTIMO.EMPRESTIMO_ID_PRODUTO%TYPE,
+    EMP_DESC EMPRESTIMO.EMP_DESCONTO%TYPE)
+    IS
+     CURSOR CUR_PROD IS
+        SELECT precoDiario, codigoDeBarras 
+        FROM PRODUTO 
+        WHERE idProduto = PROD_ID;
+     PROD_DADO CUR_PROD%ROWTYPE;
+BEGIN 
+    OPEN CUR_PROD;
+    FETCH CUR_PROD INTO PROD_DADO;
+
+    IF VERIFICA_PRODUTO(PROD_ID) THEN
+        IF QTD_PROD_ESTOQUE(PROD_ID) > QTD_PROD THEN
+            INSERT INTO EMPRESTIMO
+            VALUES(EMPRESTIMO_SEQUENCIA.NEXTVAL, SYSDATE, SYSDATE + 7, CPF_CLI, FUN_ID, PROD_ID,
+                    QTD_PROD, PROD_DADO.precoDiario * QTD_PROD, EMP_DESC);
+
+            INSERT INTO DEVOLUCAO(DEVOLUCAO_ID, DEVOLUCAO_CLIENTE_CPF, DEVOLUCAO_COD_BARRAS)
+            VALUES (DEVOLUCAO_SEQUENCIA.NEXTVAL,CPF_CLI,PROD_DADO.codigoDeBarras);
+            CLOSE CUR_PROD;
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('NÃO TEM A QUANTIDADE  DE ' || QTD_PROD || ' NO ESTOQUE.');
+            CLOSE CUR_PROD;
+        END IF;
+    ELSE
+         DBMS_OUTPUT.PUT_LINE('PRODUTO COM ID ' || PROD_ID || ' NÃO FOI LOCALIZADO NA BASE DE DADOS.');
+         CLOSE CUR_PROD;
+    END IF;
+END;
+/
+-- PROCEDURE 4 -- 
+--PROCEDURE USADA PARA ADICIONAR UM PRODUTO
+CREATE OR REPLACE PROCEDURE ADD_PRODUTO(
+        codigoDeBarras PRODUTO.CODIGODEBARRAS%TYPE,
+        nomeProduto PRODUTO.NOMEPRODUTO%TYPE,
+        idCategoriaProduto PRODUTO.IDCATEGORIAPRODUTO%TYPE,
+        quantidadeEstoque PRODUTO.QUANTIDADEESTOQUE%TYPE,
+        fabricante PRODUTO.FABRICANTE%TYPE,
+        localizacaoPrateleira PRODUTO.LOCALIZACAOPRATELEIRA%TYPE,
+        precoDiario PRODUTO.PRECODIARIO%TYPE,
+        prod_forn_cnpj PRODUTO.PROD_FORN_CNPJ%TYPE) IS
+BEGIN 
+
+    INSERT INTO PRODUTO VALUES(codigoDeBarras,PRODUTO_SEQUENCIA.NEXTVAL,nomeProduto,idCategoriaProduto,quantidadeEstoque,
+                              fabricante,localizacaoPrateleira,precoDiario,prod_forn_cnpj);
+    IF SQL%ROWCOUNT > 0 THEN 
+         DBMS_OUTPUT.PUT_LINE('Produto inserido com sucesso');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Não foi possivel inserir o produto');
+    END IF;
+END;
+/
+-- PROCEDURE 5 -- 
+-- PROCEDURE USADA PARA INSERIR UM FORNECEDOR
+CREATE OR REPLACE PROCEDURE ADD_FORNECEDOR(
+        CNPJ FORNECEDOR.CNPJ%TYPE,
+        idProduto FORNECEDOR.IDPRODUTO%TYPE,
+        nomeFornecedor FORNECEDOR.NOMEFORNECEDOR%TYPE,
+        enderecoFornecedor FORNECEDOR.ENDERECOFORNECEDOR%TYPE,
+        cidadeFornecedor FORNECEDOR.CIDADEFORNECEDOR%TYPE,
+        estadoFornecedor FORNECEDOR.ESTADOFORNECEDOR%TYPE,
+        emailFornecedor FORNECEDOR.EMAILFORNECEDOR%TYPE,
+        telefoneFornecedor FORNECEDOR.TELEFONEFORNECEDOR%TYPE
+    ) IS
+BEGIN
+
+    INSERT INTO FORNECEDOR VALUES(CNPJ,FORNECEDOR_SEQUENCIA.NEXTVAL,nomeFornecedor,enderecoFornecedor,
+                                  cidadeFornecedor,estadoFornecedor,emailFornecedor,telefoneFornecedor);
+
+    IF SQL%ROWCOUNT > 0 THEN 
+        DBMS_OUTPUT.PUT_LINE('Fornecedor inserido com sucesso.');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Não foi possivel inserir o Fornecedor.');
+    END IF;
+END;
+/
+
+-- PROCEDURE 6 -- 
+-- PROCEURE USADA PARA INSERIR RESERVA_PRODUTO
+CREATE OR REPLACE PROCEDURE ADD_RESERVA_PRODUTO(
+        dt_h reserva.DATA_HORA%type,
+        cpf_cliente reserva.cpfCliente%type,
+        id_func reserva.idFuncionario%type,
+        reserva_quant reserva.RESERVAR_QTD_PRODUTO%type,
+        idProduto reserva.idProduto%type
+    ) IS
+BEGIN 
+    IF QTD_PROD_ESTOQUE(idProduto) > reserva_quant THEN --verificando se tem a quantidade no estoque
+        INSERT INTO RESERVA VALUES(RESERVA_SEQUENCIA.NEXTVAL, SYSDATE,dt_h,cpf_cliente,idProduto,id_func,reserva_quant);
+
+        IF SQL%ROWCOUNT > 0 THEN 
+            DBMS_OUTPUT.PUT_LINE('Reserva inserido com sucesso.');
+        ELSE
+             DBMS_OUTPUT.PUT_LINE('Nao foi possivel inserir o reserva.');
+        END IF;
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Não tem essa quantidade de produto no estoque.');
+    END IF;
+END;
+/
+
+-- PROCEDURE 8 -- 
+--- PROCEDURE PARA ADICIONAR CLIENTE
+CREATE OR REPLACE PROCEDURE ADD_CLIENTE(
+        cpf_cliente CLIENTE.CPFCLIENTE%TYPE , 
+        nome_cliente CLIENTE.NOMECLIENTE%TYPE,
+        endereco_cliente CLIENTE.ENDERECOCLIENTE%TYPE,
+        cidade_cliente CLIENTE.CIDADECLIENTE%TYPE,
+        estado_cliente CLIENTE.ESTADOCLIENTE%TYPE,
+        telefone_cliente CLIENTE.TELEFONECLIENTE%TYPE,
+        email_cliente CLIENTE.EMAILCLIENTE%TYPE,
+        codigo_categoria CLIENTE.CODIGOCATEGORIA%TYPE,
+        cliente_data_nascimento CLIENTE.CLIENTE_DATA_NASCIMENTO%TYPE
+    ) IS
+BEGIN
+    INSERT INTO CLIENTE VALUES(cpf_cliente,nome_cliente,endereco_cliente,cidade_cliente,estado_cliente,telefone_cliente,
+           email_cliente,codigo_categoria,cliente_data_nascimento);
+
+    IF SQL%ROWCOUNT > 0 THEN 
+        DBMS_OUTPUT.PUT_LINE('Cliente inserido com sucesso');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Nao foi possivel inserir o cliente');
+    END IF;
+END;
+/
+
+-- PROCEDURE 9 -- 
+--- PROCEDURE PARA REMOVER RESERVA
+CREATE OR REPLACE PROCEDURE REMOVER_RESERVA(
+    id_reserva reserva.idReserva%type,
+    cpf_Cliente reserva.cpfCliente%type,
+    id_Produto reserva.idProduto%type)
+IS 
+BEGIN 
+    IF(VERIFICA_PRODUTO(id_Produto)) THEN 
+        UPDATE RESERVA SET 
+            reserva.STATUS_RESERVA = false
+        WHERE cpfCliente = cpfCliente AND idProduto = id_Produto AND idReserva = id_reserva;
+    ELSE
+     DBMS_OUTPUT.PUT_LINE('Produto não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 10 -- 
+--- PROCEDURE PARA REMOVER CATEGORIA CLIENTE
+CREATE OR REPLACE PROCEDURE REMOVER_CATEGORIA_CLIENTE(
+    flag_codigoCategoria CATEGORIA_CLIENTE.codigoCategoria%type,
+    flag_descricao CATEGORIA_CLIENTE.descricao%type,
+    flag_diasDeEmprestimo CATEGORIA_CLIENTE.diasDeEmprestimo%type)
+IS 
+BEGIN 
+    IF(VERIFICA_CATEGORIA_CLIENTE(flag_codigoCategoria) )THEN 
+        UPDATE CATEGORIA_CLIENTE SET 
+            descricao = '-'
+        WHERE codigoCategoria = flag_codigoCategoria;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Categoria-Cliente não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 11 -- 
+--- PROCEDURE PARA REMOVER CATEGORIA PRODUTO
+CREATE OR REPLACE PROCEDURE REMOVER_CATEGORIA_PRODUTO(
+    flag_idCategoriaProduto CATEGORIA_PRODUTO.idCategoriaProduto%type,
+    flag_descricao CATEGORIA_PRODUTO.descricao%type)
+IS 
+BEGIN 
+    IF(VERIFICA_CATEGORIA_PRODUTO(flag_idCategoriaProduto))THEN 
+        UPDATE CATEGORIA_PRODUTO SET 
+            descricao = '-'
+        WHERE idCategoriaProduto = flag_idCategoriaProduto;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Categoria-Produto não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 12 -- 
+--- PROCEDURE PARA REMOVER CLIENTE
+CREATE OR REPLACE PROCEDURE REMOVER_CLIENTE(
+    flag_cpfCliente CLIENTE.cpfCliente%type,
+    flag_codigoCategoria CLIENTE.codigoCategoria%type)
+IS 
+BEGIN 
+    IF(VERIFICA_CLIENTE(flag_codigoCategoria)) THEN 
+        UPDATE CLIENTE SET 
+            codigoCategoria = -1
+        WHERE flag_cpfCliente = cpfCliente;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Cliente não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 13 -- 
+--- PROCEDURE PARA REMOVER FORNECEDOR
+CREATE OR REPLACE PROCEDURE REMOVER_FORNECEDOR(
+    flag_CNPJ FORNECEDOR.CNPJ%type,
+    flag_idProduto FORNECEDOR.idProduto%type)
+IS 
+BEGIN 
+    IF(VERIFICA_FORNECEDOR(flag_CNPJ)) THEN 
+        UPDATE FORNECEDOR SET 
+            CNPJ = ''
+        WHERE flag_CNPJ = CNPJ;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Fornecedor não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 14 -- 
+--- PROCEDURE PARA REMOVER PRODUTO
+CREATE OR REPLACE PROCEDURE REMOVER_PRODUTO(
+    flag_idProduto PRODUTO.idProduto%type,
+    flag_CNPJ PRODUTO.PROD_FORN_CNPJ%type,
+    flag_idCategoriaProduto PRODUTO.idCategoriaProduto%type)
+IS 
+BEGIN 
+    IF(VERIFICA_PRODUTO(flag_CNPJ)) THEN 
+        UPDATE PRODUTO SET 
+            PROD_FORN_CNPJ = ''
+        WHERE flag_CNPJ = PROD_FORN_CNPJ;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Produto não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 15 -- 
+--- PROCEDURE PARA REMOVER PRODUTO-FORNECEDOR
+CREATE OR REPLACE PROCEDURE REMOVER_PRODUTO_FORNECEDOR(
+    flag_idProduto PRODUTO_FORNECEDOR.ID_PRODUTO%type,
+    flag_CNPJ PRODUTO_FORNECEDOR.CNPJ_FORNECEDOR%type)
+IS 
+BEGIN 
+    IF(VERIFICA_PRODUTO_FORNECEDOR(flag_CNPJ)) THEN 
+        UPDATE PRODUTO_FORNECEDOR SET 
+            CNPJ_FORNECEDOR = ''
+        WHERE flag_CNPJ = CNPJ_FORNECEDOR;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Produto-Forncedor não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 16 -- 
+--- PROCEDURE PARA REMOVER FUNCIONÁRIO
+CREATE OR REPLACE PROCEDURE REMOVER_FUNCIONARIO(
+    flag_idFuncionario FUNCIONARIO.idFuncionario%type)
+IS 
+    BEGIN 
+    IF(VERIFICA_FUNCIONARIO(flag_idFuncionario)) THEN 
+        UPDATE FUNCIONARIO SET 
+            idFuncionario = -1
+        WHERE flag_idFuncionario = idFuncionario;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Funcionário não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 17 -- 
+--- PROCEDURE PARA REMOVER RESERVA
+CREATE OR REPLACE PROCEDURE REMOVER_RESERVA(
+    flag_idReserva RESERVA.idReserva%type,
+    flag_cpfCliente RESERVA.cpfCliente%type,
+    flag_idProduto RESERVA.idProduto%type,
+    flag_idFuncionario RESERVA.idFuncionario%type)
+
+IS 
+    BEGIN 
+    IF(VERIFICA_RESERVA(flag_idReserva)) THEN 
+        UPDATE RESERVA SET 
+            idReserva = -1
+        WHERE flag_idReserva = idReserva;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Reserva não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 18 -- 
+--- PROCEDURE PARA REMOVER EMPRESTIMO
+CREATE OR REPLACE PROCEDURE REMOVER_EMPRESTIMO(
+    flag_idEmprestimo EMPRESTIMO.idEmprestimo%type,
+    flag_cpfCliente EMPRESTIMO.cpfCliente%type,
+    flag_idFuncionario EMPRESTIMO.idFuncionario%type,
+    flag_EMPRESTIMO_ID_PRODUTO EMPRESTIMO.EMPRESTIMO_ID_PRODUTO%type)
+
+IS 
+    BEGIN 
+    IF(VERIFICA_EMPRESTIMO(flag_EMPRESTIMO_ID_PRODUTO)) THEN 
+        UPDATE EMPRESTIMO SET 
+            idEmprestimo = -1
+        WHERE flag_idEmprestimo = idEmprestimo;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Empréstimo não foi encontrado');
+    END IF;
+END;
+/
+
+-- PROCEDURE 19 -- 
+--- PROCEDURE PARA REMOVER DEVOLUÇÃO
+CREATE OR REPLACE PROCEDURE REMOVER_DEVOLUCAO(
+    flag_DEVOLUCAO_ID  DEVOLUCAO.DEVOLUCAO_ID%type,
+    flag_DEVOLUCAO_ID_FUNCIONARIO DEVOLUCAO.DEVOLUCAO_ID_FUNCIONARIO%type,
+    flag_DEVOLUCAO_CLIENTE_CPF DEVOLUCAO.DEVOLUCAO_CLIENTE_CPF%type)
+IS 
+    BEGIN 
+    IF(VERIFICA_DEVOLUCAO(flag_DEVOLUCAO_ID)) THEN 
+        UPDATE DEVOLUCAO SET 
+            DEVOLUCAO_ID = -1
+        WHERE flag_DEVOLUCAO_ID = DEVOLUCAO_ID;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Devolução não foi encontrado');
+    END IF;
+END;
+/
+
