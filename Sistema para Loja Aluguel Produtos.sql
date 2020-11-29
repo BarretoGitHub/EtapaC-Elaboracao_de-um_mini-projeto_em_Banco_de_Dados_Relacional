@@ -314,3 +314,147 @@ DELETE FROM RESERVA WHERE 1=1;
 DELETE FROM EMPRESTIMO WHERE 1=1;
 DELETE FROM DEVOLUCAO WHERE 1=1;
 
+
+
+-- *******************************************************************
+                                    -- RELATÓRIOS --
+-- RELATÓRIO 1: 
+/* 1) O sistema deve permitir a impressão de uma listagem de produtos alugados no momento,
+contendo data inicial do aluguel, data final do aluguel, dados de identificação do cliente,
+dados de identificação dos produtos alugados, quantidades alugadas, valor total e
+desconto concedido.*/
+
+SELECT 
+    c.NOMECLIENTE as "CLIENTE",
+    c.TELEFONECLIENTE as "TELEFONE",
+    e.DATA_HORA_EMPRESTIMO as "DATA EMPRESTIMO",
+    e.DATAPREVISTA as "DATA PREVISTA",
+    p.NOMEPRODUTO as "PRODUTO",
+    p.CODIGODEBARRAS as "CODIGO DE BARRAS",
+    e.EMPRESTIMO_QTD_PRODUTO as "QUANTIDADE"
+FROM EMPRESTIMO e
+INNER JOIN CLIENTE c ON e.CPFCLIENTE = c.CPFCLIENTE
+INNER JOIN PRODUTO p ON e.EMPRESTIMO_ID_PRODUTO = p.IDPRODUTO
+INNER JOIN DEVOLUCAO d ON e.CPFCLIENTE = d.DEVOLUCAO_CLIENTE_CPF
+WHERE ('06/12/19' BETWEEN e.DATA_HORA_EMPRESTIMO AND e.DATAPREVISTA) AND (d.DATA_HORA_DEVOLUCAO IS NOT NULL);
+----------
+
+-- RELATÓRIO 2: 
+/* 2) O sistema deve permitir a impressão de uma listagem de clientes que possuem produtos
+alugados  em atraso, contendo o nome do cliente, telefone, os produtos a devolver, 
+a data prevista para devolução, quantidade de dias em atraso e valor da multa.*/
+SELECT 
+    c.NOMECLIENTE as "CLIENTE",
+    c.TELEFONECLIENTE as "TELEFONE",
+    p.NOMEPRODUTO as "TELEFONE",
+    p.CODIGODEBARRAS as "CODIGO DE BARRAS",
+    e.EMPRESTIMO_QTD_PRODUTO as "QUANTIDADE",
+    e.DATAPREVISTA,
+    d.DATA_HORA_DEVOLUCAO
+FROM CLIENTE c
+INNER JOIN EMPRESTIMO e ON c.CPFCLIENTE = e.CPFCLIENTE
+INNER JOIN PRODUTO p ON e.EMPRESTIMO_ID_PRODUTO = p.IDPRODUTO
+INNER JOIN DEVOLUCAO d ON e.CPFCLIENTE = d.DEVOLUCAO_CLIENTE_CPF
+WHERE ('14-12-2020' > e.DATAPREVISTA) AND (d.DATA_HORA_DEVOLUCAO IS NOT NULL);
+----------
+
+-- RELATÓRIO 3:
+/* 3) O sistema deve permitir a impressão de um relatório contendo dados das compras efetuadas, 
+contendo a data da compra, dados de identificação do fornecedor, dados de identificação dos
+produtos comprados, a quantidade de cada um e o pre?o unit?rio de cada produto comprado.*/
+
+SELECT 
+  pf.DATA_COMPRA as "DATA COMPRA",
+  pf.CNPJ_FORNECEDOR as "CNPJ",
+  f.NOMEFORNECEDOR as "NOME",
+  f.EMAILFORNECEDOR as "EMAIL",
+  f.TELEFONEFORNECEDOR as "TELEFONE",
+  p.NOMEPRODUTO as "NOME PRODUTO",
+  P.PRECODIARIO as "PRECO",
+  pf.QTD_PRODUTO_COMPRAR as "QTD_PRODUTO_COMPRAR"
+FROM PRODUTO_FORNECEDOR pf
+    INNER JOIN PRODUTO p ON pf.ID_PRODUTO = p.IDPRODUTO
+    INNER JOIN FORNECEDOR f ON pf.CNPJ_FORNECEDOR = f.CNPJ ORDER BY f.NOMEFORNECEDOR;
+----------
+-- RELATÓRIO 4: 
+/* 4) O sistema deve permitir a impressão de uma listagem de produtos de modo a saber quais os
+ produtos mais alugados e os menos alugados da loja.*/
+ 
+SELECT 
+  p.IDPRODUTO as "ID PRODUTO",
+  p.NOMEPRODUTO as "NOME",
+  p.CODIGODEBARRAS as "CODIGO DE BARRAS",
+(SELECT SUM(e.EMPRESTIMO_QTD_PRODUTO)  FROM EMPRESTIMO e
+WHERE e.EMPRESTIMO_ID_PRODUTO = p.IDPRODUTO) as "QUANTIDADE"
+FROM PRODUTO p ORDER BY "QUANTIDADE";
+
+--RELATÓRIO 5: 
+/* 5) O sistema deve permitir a impressão de uma listagem de clientes de modo a saber quais os clientes
+ que mais alugam e os que menos alugam na loja.*/
+
+SELECT 
+  c.NOMECLIENTE as "NOME",
+  c.CPFCLIENTE as "CPF",
+  c.TELEFONECLIENTE as "TELEFONE",
+  c.EMAILCLIENTE as "EMAIL",
+  (SELECT SUM(e.EMPRESTIMO_QTD_PRODUTO) FROM EMPRESTIMO e
+    WHERE e.CPFCLIENTE = c.CPFCLIENTE) as "QUANTIDADE"
+FROM CLIENTE c ORDER BY QUANTIDADE;
+
+----------
+-- RELATÓRIO 6: 
+/* 6) O sistema deve permitir a impressão de uma listagem de fornecedores de modo a saber quais os fornecedores 
+que mais fornecem produtos e os que menos fornecem para a loja.*/
+
+SELECT 
+  f.NOMEFORNECEDOR as "FORNECEDOR",
+  SUM(pf.QTD_PRODUTO_COMPRAR) as "QUANTIDADE"
+    FROM PRODUTO_FORNECEDOR pf
+    INNER JOIN FORNECEDOR f ON pf.CNPJ_FORNECEDOR = f.CNPJ
+    GROUP BY f.NOMEFORNECEDOR;
+
+--RELATÓRIO 7:
+/* 7) Consultando produtos emprestadas ordenadas por categoria de obra, contendo o nome do cpf do cliente,
+ nome do produto, quantidade de produtos á emprestar, nome do fornecedor, data de emprestimo e data prevista para a devolução do produto. */
+
+SELECT 
+      a.idCategoriaProduto "ID_PRODUTO",
+      a.nomeProduto "PRODUTO",
+      b.EMPRESTIMO_QTD_PRODUTO"QUANTIDADE-EMPRESTADAS",
+      b.cpfCliente "CPF-CLIENTE",
+      c.nomeFornecedor "FABRICANTE",
+      b.DATA_HORA_EMPRESTIMO "DATA-EMPRESTIMO",
+      b.dataPrevista "DATA-PREVISTA" 
+FROM PRODUTO a,EMPRESTIMO b, FORNECEDOR c
+     WHERE  a.PROD_FORN_CNPJ = c.CNPJ AND b.EMPRESTIMO_ID_PRODUTO = a.idProduto 
+     AND (SYSDATE BETWEEN b.DATA_HORA_EMPRESTIMO AND b.DATAPREVISTA);
+
+----------
+-- RELATÓRIO 8:
+/* 8) Consultando produtos em atraso, contendo o produto ,nome do cliente, o telefone, o email,id do produto, data de empréstimo */
+
+SELECT 
+       a.nomeProduto "PRODUTO",
+       b.nomeCliente "CLIENTE",
+       b.telefoneCliente "TEL-CLIENTE",
+       b.emailCliente "MAIL-CLIENTE",
+       c.idEmprestimo "NUMERO-PRODUTO",
+       c.DATA_HORA_EMPRESTIMO "DATA-EMPRESTIMO"
+FROM PRODUTO a,CLIENTE b,EMPRESTIMO c
+WHERE b.cpfCliente = c.cpfCliente AND a.idProduto= c.EMPRESTIMO_ID_PRODUTO; 
+   
+--RELATÓRIO 9:
+/* 9) Consultando reservas efetuadas, contendo o produto,nome e-mail e telefone do cliente,o numero da reserva, quantidade de produtos reservados,
+nome e id do funcionario reponsavel pela reservas.*/
+SELECT 
+      a.nomeProduto "PRODUTO",
+      b.nomeCliente "CLIENTE",
+      b.telefoneCliente "TEL-CLIENTE",
+      b.emailCliente "MAIL-CLIENTE",
+      c.idReserva "NUMERO RESERVA",
+      c.RESERVAR_QTD_PRODUTO "UNIDADES-RESERVADAS",
+      f.nomeFuncionario "FUNCION?RIO RESPONSAVEL",
+      f.idFuncionario "ID-FUNCINARIO"
+FROM PRODUTO a,CLIENTE b, RESERVA c,FUNCIONARIO f
+     WHERE b.cpfCliente = c.cpfCliente AND a.idProduto = c.idProduto AND c.idFuncionario = f.idFuncionario;
+
