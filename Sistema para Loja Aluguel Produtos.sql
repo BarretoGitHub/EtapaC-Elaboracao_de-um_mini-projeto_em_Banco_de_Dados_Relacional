@@ -458,3 +458,22 @@ SELECT
 FROM PRODUTO a,CLIENTE b, RESERVA c,FUNCIONARIO f
      WHERE b.cpfCliente = c.cpfCliente AND a.idProduto = c.idProduto AND c.idFuncionario = f.idFuncionario;
 
+
+
+--************************* TRIGGERS ***************************
+--  TRIGGER acionado quando inserir,atualizar ou deletar registros na tabela Produto 
+CREATE OR REPLACE TRIGGER TRIGGER_PRODUTO_ATUALIZAR BEFORE
+    INSERT OR UPDATE OR DELETE ON PRODUTO
+    FOR EACH ROW
+BEGIN
+    CASE
+        WHEN inserting THEN
+            dbms_output.put_line(' PRODUTO INSERIDO COM SUCESSO: ' ||:new.nomeProduto);
+        WHEN updating THEN
+            dbms_output.put_line(' PRODUTO ATUALIZADO COM SUCESSO');
+        WHEN deleting THEN
+            dbms_output.put_line(' PRODUTO EXCLUIDO COM SUCESSO');
+    END CASE;
+END;
+/
+
