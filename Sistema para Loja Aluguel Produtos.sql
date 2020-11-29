@@ -1065,3 +1065,589 @@ IS
 END;
 /
 
+
+--************************* PACOTES ***************************
+CREATE OR REPLACE PACKAGE ALUGUEL AS
+
+    PROCEDURE ADD_RESERVA_PRODUTO(
+        dt_h reserva.DATA_HORA%type,
+        cpf_cliente reserva.cpfCliente%type,
+        id_func reserva.idFuncionario%type,
+        reserva_quant reserva.RESERVAR_QTD_PRODUTO%type,
+        idProduto reserva.idProduto%type);
+
+    PROCEDURE EMP_PROD(
+        FUN_ID EMPRESTIMO.idFuncionario%TYPE,
+        CPF_CLI EMPRESTIMO.cpfCliente%TYPE,
+        QTD_PROD EMPRESTIMO.EMPRESTIMO_QTD_PRODUTO%TYPE,
+        PROD_ID EMPRESTIMO.EMPRESTIMO_ID_PRODUTO%TYPE,
+        EMP_DESC EMPRESTIMO.EMP_DESCONTO%TYPE);
+
+    PROCEDURE DEVOLUCAO_PRODUTO(
+        id_dev DEVOLUCAO.DEVOLUCAO_ID%TYPE,
+        dt_emp DEVOLUCAO.DATA_HORA_DEVOLUCAO%TYPE,
+        cpf_Cliente DEVOLUCAO.DEVOLUCAO_CLIENTE_CPF%TYPE,
+        statusCliente DEVOLUCAO.SUSPENSO%TYPE);
+
+    PROCEDURE ADD_CLIENTE(
+        cpf_cliente CLIENTE.CPFCLIENTE%TYPE , 
+        nome_cliente CLIENTE.NOMECLIENTE%TYPE,
+        endereco_cliente CLIENTE.ENDERECOCLIENTE%TYPE,
+        cidade_cliente CLIENTE.CIDADECLIENTE%TYPE,
+        estado_cliente CLIENTE.ESTADOCLIENTE%TYPE,
+        telefone_cliente CLIENTE.TELEFONECLIENTE%TYPE,
+        email_cliente CLIENTE.EMAILCLIENTE%TYPE,
+        codigo_categoria CLIENTE.CODIGOCATEGORIA%TYPE,
+        cliente_data_nascimento CLIENTE.CLIENTE_DATA_NASCIMENTO%TYPE);
+
+    PROCEDURE ADD_PRODUTO(
+        codigoDeBarras PRODUTO.CODIGODEBARRAS%TYPE,
+        nomeProduto PRODUTO.NOMEPRODUTO%TYPE,
+        idCategoriaProduto PRODUTO.IDCATEGORIAPRODUTO%TYPE,
+        quantidadeEstoque PRODUTO.QUANTIDADEESTOQUE%TYPE,
+        fabricante PRODUTO.FABRICANTE%TYPE,
+        localizacaoPrateleira PRODUTO.LOCALIZACAOPRATELEIRA%TYPE,
+        precoDiario PRODUTO.PRECODIARIO%TYPE,
+        prod_forn_cnpj PRODUTO.PROD_FORN_CNPJ%TYPE);
+
+    PROCEDURE ADD_FORNECEDOR(
+        CNPJ FORNECEDOR.CNPJ%TYPE,
+        idProduto FORNECEDOR.IDPRODUTO%TYPE,
+        nomeFornecedor FORNECEDOR.NOMEFORNECEDOR%TYPE,
+        enderecoFornecedor FORNECEDOR.ENDERECOFORNECEDOR%TYPE,
+        cidadeFornecedor FORNECEDOR.CIDADEFORNECEDOR%TYPE,
+        estadoFornecedor FORNECEDOR.ESTADOFORNECEDOR%TYPE,
+        emailFornecedor FORNECEDOR.EMAILFORNECEDOR%TYPE,
+        telefoneFornecedor FORNECEDOR.TELEFONEFORNECEDOR%TYPE);
+
+     PROCEDURE REMOVER_RESERVA(
+        id_reserva reserva.idReserva%type,
+        cpf_Cliente reserva.cpfCliente%type,
+        id_Produto reserva.idProduto%type);
+
+
+END ALUGUEL;
+/ 
+
+CREATE OR REPLACE PACKAGE BODY ALUGUEL AS  
+    PROCEDURE EMP_PROD(  
+          FUN_ID EMPRESTIMO.idFuncionario%TYPE,
+          CPF_CLI EMPRESTIMO.cpfCliente%TYPE,
+          QTD_PROD EMPRESTIMO.EMPRESTIMO_QTD_PRODUTO%TYPE,
+          PROD_ID EMPRESTIMO.EMPRESTIMO_ID_PRODUTO%TYPE,
+          EMP_DESC EMPRESTIMO.EMP_DESCONTO%TYPE)
+        IS
+        CURSOR CUR_PROD IS
+            SELECT precoDiario, codigoDeBarras 
+            FROM PRODUTO WHERE idProduto = PROD_ID;
+        PROD_DADO CUR_PROD%ROWTYPE;
+    BEGIN 
+        OPEN CUR_PROD;
+            FETCH CUR_PROD INTO PROD_DADO;
+
+            IF VERIFICA_PRODUTO(PROD_ID) THEN
+              IF QTD_PROD_ESTOQUE(PROD_ID) > QTD_PROD THEN
+                INSERT INTO EMPRESTIMO
+                VALUES(EMPRESTIMO_SEQUENCIA.NEXTVAL, SYSDATE, SYSDATE + 7, CPF_CLI, FUN_ID, PROD_ID,
+                        QTD_PROD, PROD_DADO.precoDiario * QTD_PROD, EMP_DESC);
+
+                INSERT INTO DEVOLUCAO(DEVOLUCAO_ID, DEVOLUCAO_CLIENTE_CPF, DEVOLUCAO_COD_BARRAS)
+                VALUES (DEVOLUCAO_SEQUENCIA.NEXTVAL,CPF_CLI,PROD_DADO.codigoDeBarras);
+                
+                
+        CLOSE CUR_PROD;
+            ELSE
+                DBMS_OUTPUT.PUT_LINE('N?O TEM A QUANTIDADE  DE ' || QTD_PROD || ' NO ESTOQUE.');
+                CLOSE CUR_PROD;
+            END IF;
+
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('PRODUTO COM ID ' || PROD_ID || ' N?O FOI LOCALIZADO NA BASE DE DADOS.');
+            CLOSE CUR_PROD;
+        END IF;
+    END EMP_PROD;
+
+    PROCEDURE ADD_PRODUTO( 
+        codigoDeBarras PRODUTO.CODIGODEBARRAS%TYPE,
+        nomeProduto PRODUTO.NOMEPRODUTO%TYPE,
+        idCategoriaProduto PRODUTO.IDCATEGORIAPRODUTO%TYPE,
+        quantidadeEstoque PRODUTO.QUANTIDADEESTOQUE%TYPE,
+        fabricante PRODUTO.FABRICANTE%TYPE,
+        localizacaoPrateleira PRODUTO.LOCALIZACAOPRATELEIRA%TYPE,
+        precoDiario PRODUTO.PRECODIARIO%TYPE,
+        prod_forn_cnpj PRODUTO.PROD_FORN_CNPJ%TYPE) IS
+    BEGIN 
+
+        INSERT INTO PRODUTO VALUES(codigoDeBarras,PRODUTO_SEQUENCIA.NEXTVAL,nomeProduto,idCategoriaProduto,quantidadeEstoque,
+                                fabricante,localizacaoPrateleira,precoDiario,prod_forn_cnpj);
+        IF SQL%ROWCOUNT > 0 THEN 
+            DBMS_OUTPUT.PUT_LINE('Produto inserido com sucesso');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('N?o foi possivel inserir o produto');
+        END IF;
+    END ADD_PRODUTO;
+
+    PROCEDURE ADD_FORNECEDOR(
+        CNPJ FORNECEDOR.CNPJ%TYPE,
+        idProduto FORNECEDOR.IDPRODUTO%TYPE,
+        nomeFornecedor FORNECEDOR.NOMEFORNECEDOR%TYPE,
+        enderecoFornecedor FORNECEDOR.ENDERECOFORNECEDOR%TYPE,
+        cidadeFornecedor FORNECEDOR.CIDADEFORNECEDOR%TYPE,
+        estadoFornecedor FORNECEDOR.ESTADOFORNECEDOR%TYPE,
+        emailFornecedor FORNECEDOR.EMAILFORNECEDOR%TYPE,
+        telefoneFornecedor FORNECEDOR.TELEFONEFORNECEDOR%TYPE
+    ) IS
+    BEGIN
+
+        INSERT INTO FORNECEDOR VALUES(CNPJ,FORNECEDOR_SEQUENCIA.NEXTVAL,nomeFornecedor,enderecoFornecedor,
+                                    cidadeFornecedor,estadoFornecedor,emailFornecedor,telefoneFornecedor);
+
+        IF SQL%ROWCOUNT > 0 THEN 
+            DBMS_OUTPUT.PUT_LINE('Fornecedor inserido com sucesso');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('N?o foi possivel inserir o Fornecedor');
+        END IF;
+    END ADD_FORNECEDOR;
+
+
+    PROCEDURE ADD_RESERVA_PRODUTO(
+        dt_h reserva.DATA_HORA%type,
+        cpf_cliente reserva.cpfCliente%type,
+        id_func reserva.idFuncionario%type,
+        reserva_quant reserva.RESERVAR_QTD_PRODUTO%type,
+        idProduto reserva.idProduto%type
+    ) IS
+    BEGIN 
+        IF QTD_PROD_ESTOQUE(idProduto) > reserva_quant THEN --verificando se tem a quantidade no estoque
+            INSERT INTO RESERVA VALUES(RESERVA_SEQUENCIA.NEXTVAL, dt_h,cpf_cliente,idProduto,id_func,reserva_quant);
+
+            IF SQL%ROWCOUNT > 0 THEN 
+            DBMS_OUTPUT.PUT_LINE('Reserva inserido com sucesso');
+            ELSE
+            DBMS_OUTPUT.PUT_LINE('Nao foi possivel inserir o reserva');
+            END IF;
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('Nao tem essa quantidade de produto no estoque');
+        END IF;
+    END ADD_RESERVA_PRODUTO;
+
+
+    PROCEDURE ADD_CLIENTE(
+        cpf_cliente CLIENTE.CPFCLIENTE%TYPE , 
+        nome_cliente CLIENTE.NOMECLIENTE%TYPE,
+        endereco_cliente CLIENTE.ENDERECOCLIENTE%TYPE,
+        cidade_cliente CLIENTE.CIDADECLIENTE%TYPE,
+        estado_cliente CLIENTE.ESTADOCLIENTE%TYPE,
+        telefone_cliente CLIENTE.TELEFONECLIENTE%TYPE,
+        email_cliente CLIENTE.EMAILCLIENTE%TYPE,
+        codigo_categoria CLIENTE.CODIGOCATEGORIA%TYPE,
+        cliente_data_nascimento CLIENTE.CLIENTE_DATA_NASCIMENTO%TYPE
+    ) IS
+    BEGIN
+        INSERT INTO CLIENTE VALUES(cpf_cliente,nome_cliente,endereco_cliente,cidade_cliente,estado_cliente,telefone_cliente,
+            email_cliente,codigo_categoria,cliente_data_nascimento);
+
+        IF SQL%ROWCOUNT > 0 THEN 
+            DBMS_OUTPUT.PUT_LINE('CLIENTE inserido com sucesso');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('Nao foi possivel inserir o CLIENTE');
+        END IF;
+    END ADD_CLIENTE;
+
+    PROCEDURE DEVOLUCAO_PRODUTO( --ok
+        id_dev DEVOLUCAO.DEVOLUCAO_ID%TYPE,
+        id_fun DEVOLUCAO.DEVOLUCAO_ID%TYPE,
+        dt_emp DEVOLUCAO.DATA_HORA_DEVOLUCAO%TYPE,
+        cpf_Cliente DEVOLUCAO.DEVOLUCAO_CLIENTE_CPF%TYPE,
+        statusCliente DEVOLUCAO.SUSPENSO%TYPE)
+    Is
+    begin 
+        UPDATE DEVOLUCAO SET 
+            DATA_HORA_DEVOLUCAO = dt_emp,
+            devolucao_id_funcionario = id_fun,
+            SUSPENSO = statusCliente
+        WHERE DEVOLUCAO_ID = id_dev AND DEVOLUCAO_CLIENTE_CPF = cpf_Cliente;
+
+            IF SQL%ROWCOUNT > 0 THEN 
+                DBMS_OUTPUT.PUT_LINE('CLIENTE inserido com sucesso');
+            ELSE
+                DBMS_OUTPUT.PUT_LINE('Nao foi possivel inserir o CLIENTE');
+            END IF;
+
+    end DEVOLUCAO_PRODUTO;
+END ALUGUEL;
+/
+
+CREATE OR REPLACE PACKAGE ALUGUEL_REMOCOES AS
+ PROCEDURE REMOVER_CATEGORIA_CLIENTE(
+    flag_codigoCategoria CATEGORIA_CLIENTE.codigoCategoria%type,
+    flag_descricao CATEGORIA_CLIENTE.descricao%type,
+    flag_diasDeEmprestimo CATEGORIA_CLIENTE.diasDeEmprestimo%type);
+
+PROCEDURE REMOVER_CATEGORIA_PRODUTO(
+    flag_idCategoriaProduto CATEGORIA_PRODUTO.idCategoriaProduto%type,
+    flag_descricao CATEGORIA_PRODUTO.descricao%type);
+
+PROCEDURE REMOVER_CLIENTE(
+    flag_cpfCliente CLIENTE.cpfCliente%type,
+    flag_codigoCategoria CLIENTE.codigoCategoria%type);
+    
+PROCEDURE REMOVER_FORNECEDOR(
+    flag_CNPJ FORNECEDOR.CNPJ%type,
+    flag_idProduto FORNECEDOR.idProduto%type);
+
+PROCEDURE REMOVER_PRODUTO(
+    flag_idProduto PRODUTO.idProduto%type,
+    flag_CNPJ PRODUTO.PROD_FORN_CNPJ%type,
+    flag_idCategoriaProduto PRODUTO.idCategoriaProduto%type);
+    
+    
+PROCEDURE REMOVER_PRODUTO_FORNECEDOR(
+    flag_idProduto PRODUTO_FORNECEDOR.ID_PRODUTO%type,
+    flag_CNPJ PRODUTO_FORNECEDOR.CNPJ_FORNECEDOR%type);
+
+PROCEDURE REMOVER_FUNCIONARIO(
+    flag_idFuncionario FUNCIONARIO.idFuncionario%type);
+    
+PROCEDURE REMOVER_RESERVA(
+    flag_idReserva RESERVA.idReserva%type,
+    flag_cpfCliente RESERVA.cpfCliente%type,
+    flag_idProduto RESERVA.idProduto%type,
+    flag_idFuncionario RESERVA.idFuncionario%type);
+
+PROCEDURE REMOVER_EMPRESTIMO(
+    flag_idEmprestimo EMPRESTIMO.idEmprestimo%type,
+    flag_cpfCliente EMPRESTIMO.cpfCliente%type,
+    flag_idFuncionario EMPRESTIMO.idFuncionario%type,
+    flag_EMPRESTIMO_ID_PRODUTO EMPRESTIMO.EMPRESTIMO_ID_PRODUTO%type);
+
+PROCEDURE REMOVER_DEVOLUCAO(
+    flag_DEVOLUCAO_ID  DEVOLUCAO.DEVOLUCAO_ID%type,
+    flag_DEVOLUCAO_ID_FUNCIONARIO DEVOLUCAO.DEVOLUCAO_ID_FUNCIONARIO%type,
+    flag_DEVOLUCAO_CLIENTE_CPF DEVOLUCAO.DEVOLUCAO_CLIENTE_CPF%type);
+
+END ALUGUEL_REMOCOES;
+/ 
+
+CREATE OR REPLACE PACKAGE BODY ALUGUEL_REMOCOES AS  
+PROCEDURE REMOVER_RESERVA(
+    id_reserva reserva.idReserva%type,
+    cpf_Cliente reserva.cpfCliente%type,
+    id_Produto reserva.idProduto%type)
+IS
+BEGIN 
+    IF(VERIFICA_PRODUTO(id_Produto)) THEN 
+        UPDATE RESERVA SET 
+            reserva.STATUS_RESERVA = false
+        WHERE cpfCliente = cpfCliente AND idProduto = id_Produto AND idReserva = id_reserva;
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Produto não foi encontrado');
+    END IF;
+END REMOVER_RESERVA;
+ 
+PROCEDURE REMOVER_CATEGORIA_CLIENTE(
+    flag_codigoCategoria CATEGORIA_CLIENTE.codigoCategoria%type,
+    flag_descricao CATEGORIA_CLIENTE.descricao%type,
+    flag_diasDeEmprestimo CATEGORIA_CLIENTE.diasDeEmprestimo%type)
+IS 
+  BEGIN 
+    IF(VERIFICA_CATEGORIA_CLIENTE(flag_codigoCategoria) )THEN 
+        UPDATE CATEGORIA_CLIENTE SET 
+            descricao = '-'
+        WHERE codigoCategoria = flag_codigoCategoria;
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Categoria-Cliente não foi encontrado');
+    END IF;
+END REMOVER_CATEGORIA_CLIENTE;
+
+PROCEDURE REMOVER_CATEGORIA_PRODUTO(
+    flag_idCategoriaProduto CATEGORIA_PRODUTO.idCategoriaProduto%type,
+    flag_descricao CATEGORIA_PRODUTO.descricao%type)
+    IS 
+BEGIN 
+    IF(VERIFICA_CATEGORIA_PRODUTO(flag_idCategoriaProduto))THEN 
+        UPDATE CATEGORIA_PRODUTO SET 
+            descricao = '-'
+        WHERE idCategoriaProduto = flag_idCategoriaProduto;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Categoria-Produto não foi encontrado');
+    END IF;
+END REMOVER_CATEGORIA_PRODUTO;
+
+PROCEDURE REMOVER_CLIENTE(
+    flag_cpfCliente CLIENTE.cpfCliente%type,
+    flag_codigoCategoria CLIENTE.codigoCategoria%type)
+IS 
+BEGIN 
+    IF(VERIFICA_CLIENTE(flag_codigoCategoria)) THEN 
+        UPDATE CLIENTE SET 
+            codigoCategoria = -1
+        WHERE flag_cpfCliente = cpfCliente;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Cliente não foi encontrado');
+    END IF;
+END REMOVER_CLIENTE;
+
+PROCEDURE REMOVER_FORNECEDOR(
+    flag_CNPJ FORNECEDOR.CNPJ%type,
+    flag_idProduto FORNECEDOR.idProduto%type)
+IS 
+BEGIN 
+    IF(VERIFICA_FORNECEDOR(flag_CNPJ)) THEN 
+        UPDATE FORNECEDOR SET 
+            CNPJ = ''
+        WHERE flag_CNPJ = CNPJ;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Fornecedor não foi encontrado');
+    END IF;
+END REMOVER_FORNECEDOR;
+
+PROCEDURE REMOVER_PRODUTO(
+    flag_idProduto PRODUTO.idProduto%type,
+    flag_CNPJ PRODUTO.PROD_FORN_CNPJ%type,
+    flag_idCategoriaProduto PRODUTO.idCategoriaProduto%type)
+IS 
+BEGIN 
+    IF(VERIFICA_PRODUTO(flag_CNPJ)) THEN 
+        UPDATE PRODUTO SET 
+            PROD_FORN_CNPJ = ''
+        WHERE flag_CNPJ = PROD_FORN_CNPJ;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Produto não foi encontrado');
+    END IF;
+END REMOVER_PRODUTO;
+
+PROCEDURE REMOVER_PRODUTO_FORNECEDOR(
+    flag_idProduto PRODUTO_FORNECEDOR.ID_PRODUTO%type,
+    flag_CNPJ PRODUTO_FORNECEDOR.CNPJ_FORNECEDOR%type)
+IS 
+BEGIN 
+    IF(VERIFICA_PRODUTO_FORNECEDOR(flag_CNPJ)) THEN 
+        UPDATE PRODUTO_FORNECEDOR SET 
+            CNPJ_FORNECEDOR = ''
+        WHERE flag_CNPJ = CNPJ_FORNECEDOR;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Produto-Forncedor não foi encontrado');
+    END IF;
+END REMOVER_PRODUTO_FORNECEDOR;
+
+  PROCEDURE REMOVER_FUNCIONARIO(
+    flag_idFuncionario FUNCIONARIO.idFuncionario%type)
+IS 
+    BEGIN 
+    IF(VERIFICA_FUNCIONARIO(flag_idFuncionario)) THEN 
+        UPDATE FUNCIONARIO SET 
+            idFuncionario = -1
+        WHERE flag_idFuncionario = idFuncionario;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Funcionário não foi encontrado');
+    END IF;
+END REMOVER_FUNCIONARIO;
+
+ PROCEDURE REMOVER_RESERVA(
+    flag_idReserva RESERVA.idReserva%type,
+    flag_cpfCliente RESERVA.cpfCliente%type,
+    flag_idProduto RESERVA.idProduto%type,
+    flag_idFuncionario RESERVA.idFuncionario%type)
+
+IS 
+    BEGIN 
+    IF(VERIFICA_RESERVA(flag_idReserva)) THEN 
+        UPDATE RESERVA SET 
+            idReserva = -1
+        WHERE flag_idReserva = idReserva;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Reserva não foi encontrado');
+    END IF;
+END REMOVER_RESERVA;
+
+  PROCEDURE REMOVER_EMPRESTIMO(
+    flag_idEmprestimo EMPRESTIMO.idEmprestimo%type,
+    flag_cpfCliente EMPRESTIMO.cpfCliente%type,
+    flag_idFuncionario EMPRESTIMO.idFuncionario%type,
+    flag_EMPRESTIMO_ID_PRODUTO EMPRESTIMO.EMPRESTIMO_ID_PRODUTO%type)
+
+IS 
+    BEGIN 
+    IF(VERIFICA_EMPRESTIMO(flag_EMPRESTIMO_ID_PRODUTO)) THEN 
+        UPDATE EMPRESTIMO SET 
+            idEmprestimo = -1
+        WHERE flag_idEmprestimo = idEmprestimo;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Empréstimo não foi encontrado');
+    END IF;
+END REMOVER_EMPRESTIMO;
+
+PROCEDURE REMOVER_DEVOLUCAO(
+    flag_DEVOLUCAO_ID  DEVOLUCAO.DEVOLUCAO_ID%type,
+    flag_DEVOLUCAO_ID_FUNCIONARIO DEVOLUCAO.DEVOLUCAO_ID_FUNCIONARIO%type,
+    flag_DEVOLUCAO_CLIENTE_CPF DEVOLUCAO.DEVOLUCAO_CLIENTE_CPF%type)
+IS 
+    BEGIN 
+    IF(VERIFICA_DEVOLUCAO(flag_DEVOLUCAO_ID)) THEN 
+        UPDATE DEVOLUCAO SET 
+            DEVOLUCAO_ID = -1
+        WHERE flag_DEVOLUCAO_ID = DEVOLUCAO_ID;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Devolução não foi encontrado');
+    END IF;
+END REMOVER_DEVOLUCAO;
+     
+END ALUGUEL_REMOCOES;
+/
+
+
+CREATE OR REPLACE PACKAGE VERIFICACOES AS 
+    FUNCTION VERIFICA_CATEGORIA_CLIENTE(flag_codigoCategoria CATEGORIA_CLIENTE.codigoCategoria%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_CATEGORIA_PRODUTO(flag_idCategoriaProduto CATEGORIA_PRODUTO.idCategoriaProduto%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_CLIENTE(flag_cpfCliente CLIENTE.cpfCliente%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_FORNECEDOR(flag_CNPJ FORNECEDOR.CNPJ%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_PRODUTO(flag_idProduto PRODUTO.idProduto%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_PRODUTO_FORNECEDOR(flag_CNPJ_FORNECEDOR PRODUTO_FORNECEDOR.CNPJ_FORNECEDOR%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_FUNCIONARIO(flag_idFuncionario FUNCIONARIO.idFuncionario%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_RESERVA(flag_idReserva RESERVA.idReserva%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_EMPRESTIMO(flag_idEmprestimo EMPRESTIMO.idEmprestimo%TYPE) RETURN BOOLEAN;
+    FUNCTION VERIFICA_DEVOLUCAO(flag_DEVOLUCAO_ID DEVOLUCAO.DEVOLUCAO_ID%TYPE) RETURN BOOLEAN;
+END VERIFICACOES;
+/
+
+CREATE OR REPLACE PACKAGE BODY VERIFICACOES AS 
+FUNCTION VERIFICA_CATEGORIA_CLIENTE(flag_codigoCategoria CATEGORIA_CLIENTE.codigoCategoria%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA1 CATEGORIA_CLIENTE.codigoCategoria%TYPE;
+        BEGIN 
+         SELECT codigoCategoria INTO CATEGORIA_VERIFICADA1  FROM CATEGORIA_CLIENTE 
+            WHERE codigoCategoria = flag_codigoCategoria;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO. Categoria Cliente não encontrado!');
+     RETURN FALSE;
+END VERIFICA_CATEGORIA_CLIENTE;
+
+FUNCTION VERIFICA_CATEGORIA_PRODUTO(flag_idCategoriaProduto CATEGORIA_PRODUTO.idCategoriaProduto%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA2 CATEGORIA_PRODUTO.idCategoriaProduto%TYPE;
+        BEGIN 
+         SELECT idCategoriaProduto INTO CATEGORIA_VERIFICADA2  FROM CATEGORIA_PRODUTO 
+            WHERE idCategoriaProduto = flag_idCategoriaProduto;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Categoria Produto não encontrada !');
+     RETURN FALSE;
+END VERIFICA_CATEGORIA_PRODUTO;
+   
+FUNCTION VERIFICA_CLIENTE(flag_cpfCliente CLIENTE.cpfCliente%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA3 CLIENTE.cpfCliente%TYPE;
+        BEGIN 
+         SELECT cpfCliente INTO CATEGORIA_VERIFICADA3  FROM CLIENTE 
+            WHERE cpfCliente = flag_cpfCliente;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Cliente não encontrado!');
+     RETURN FALSE;
+END VERIFICA_CLIENTE;
+
+FUNCTION VERIFICA_FORNECEDOR(flag_CNPJ FORNECEDOR.CNPJ%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA4 FORNECEDOR.CNPJ%TYPE;
+        BEGIN 
+         SELECT CNPJ INTO CATEGORIA_VERIFICADA4  FROM FORNECEDOR 
+            WHERE CNPJ = flag_CNPJ;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Fornecedor não encontrado!');
+     RETURN FALSE;
+END VERIFICA_FORNECEDOR;
+
+FUNCTION VERIFICA_PRODUTO(flag_idProduto PRODUTO.idProduto%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA5 PRODUTO.idProduto%TYPE;
+        BEGIN 
+         SELECT idProduto INTO CATEGORIA_VERIFICADA5  FROM PRODUTO 
+            WHERE idProduto = flag_idProduto;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Produto não encontrado!');
+     RETURN FALSE;
+END VERIFICA_PRODUTO;
+
+FUNCTION VERIFICA_PRODUTO_FORNECEDOR(flag_CNPJ_FORNECEDOR PRODUTO_FORNECEDOR.CNPJ_FORNECEDOR%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA6 PRODUTO_FORNECEDOR.CNPJ_FORNECEDOR%TYPE;
+        
+        BEGIN 
+         SELECT CNPJ_FORNECEDOR INTO CATEGORIA_VERIFICADA6  FROM PRODUTO_FORNECEDOR 
+            WHERE CNPJ_FORNECEDOR = flag_CNPJ_FORNECEDOR;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Produto-Fornecedor não encontrado!');
+     RETURN FALSE;
+END VERIFICA_PRODUTO_FORNECEDOR;
+
+FUNCTION VERIFICA_FUNCIONARIO(flag_idFuncionario FUNCIONARIO.idFuncionario%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA7 FUNCIONARIO.idFuncionario%TYPE;
+        
+        BEGIN 
+         SELECT idFuncionario INTO CATEGORIA_VERIFICADA7  FROM FUNCIONARIO 
+            WHERE idFuncionario = flag_idFuncionario;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Funcionário não encontrado!');
+     RETURN FALSE;
+END VERIFICA_FUNCIONARIO;
+
+FUNCTION VERIFICA_RESERVA(flag_idReserva RESERVA.idReserva%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA8 RESERVA.idReserva%TYPE;
+        
+        BEGIN 
+         SELECT idReserva INTO CATEGORIA_VERIFICADA8  FROM RESERVA
+            WHERE idFuncionario = flag_idReserva;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Reserva não encontrada!');
+     RETURN FALSE;
+END VERIFICA_RESERVA;
+
+FUNCTION VERIFICA_EMPRESTIMO(flag_idEmprestimo EMPRESTIMO.idEmprestimo%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA9 EMPRESTIMO.idEmprestimo%TYPE;
+        
+        BEGIN 
+         SELECT idEmprestimo INTO CATEGORIA_VERIFICADA9  FROM EMPRESTIMO
+            WHERE  idEmprestimo = flag_idEmprestimo;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Emprestimo não encontrado!');
+     RETURN FALSE;
+  END VERIFICA_EMPRESTIMO;
+
+FUNCTION VERIFICA_DEVOLUCAO(flag_DEVOLUCAO_ID DEVOLUCAO.DEVOLUCAO_ID%TYPE)
+    RETURN BOOLEAN IS 
+        CATEGORIA_VERIFICADA10 DEVOLUCAO.DEVOLUCAO_ID%TYPE;
+        
+        BEGIN 
+         SELECT DEVOLUCAO_ID INTO CATEGORIA_VERIFICADA10  FROM DEVOLUCAO
+            WHERE  DEVOLUCAO_ID = flag_DEVOLUCAO_ID;
+        RETURN TRUE;
+        
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('ERRO.Devolucao não encontrada!');
+     RETURN FALSE;
+     END VERIFICA_DEVOLUCAO;
+END VERIFICACOES;
+/ 
+
+
+
