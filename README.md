@@ -1,5 +1,4 @@
-# Etapa-C---Elabora-o-de-um-mini-projeto---Banco-de-Dados
-
+# Etapa C - Elaboração de um mini-projeto - Banco de Dados
 Objetivo: Demostrar conhecimentos intermediários em SQL e PL/SQL
 
 
